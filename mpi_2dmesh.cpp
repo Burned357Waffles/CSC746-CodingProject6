@@ -42,6 +42,9 @@
 
 #define DEBUG_TRACE 0 
 
+int nMessagesSent = 0;
+int nDataMoved = 0;
+
 int
 parseArgs(int ac, char *av[], AppState *as)
 {
@@ -386,7 +389,18 @@ sendStridedBuffer(float *srcBuf,
    // sendWidth by sendHeight values, and the subregion is offset from the origin of
    // srcBuf by the values specificed by srcOffsetColumn, srcOffsetRow.
    //
+   
+   MPI_Datatype vectorType;
+   MPI_Type_vector(sendHeight, sendWidth, srcWidth, MPI_FLOAT, &vectorType);
+   MPI_Type_commit(&vectorType); 
 
+   float* offset = srcBuf + srcOffsetRow * srcWidth + srcOffsetColumn;
+   MPI_Send(offset, 1, vectorType, toRank, msgTag, MPI_COMM_WORLD);
+
+   MPI_Type_free(&vectorType);
+
+   nMessagesSent++;
+   nDataMoved += sendWidth * sendHeight;
 }
 
 void
@@ -408,6 +422,17 @@ recvStridedBuffer(float *dstBuf,
    // at dstOffsetColumn, dstOffsetRow, and that is expectedWidth, expectedHeight in size.
    //
 
+   MPI_Datatype vectorType;
+   MPI_Type_vector(expectedHeight, expectedWidth, dstWidth, MPI_FLOAT, &vectorType);
+   MPI_Type_commit(&vectorType);
+
+   float* offset = dstBuf + dstOffsetRow * dstWidth + dstOffsetColumn;
+   MPI_Recv(offset, 1, vectorType, fromRank, msgTag, MPI_COMM_WORLD, &stat);
+
+   MPI_Type_free(&vectorType);
+
+   nMessagesSent++;
+   nDataMoved += expectedWidth * expectedHeight;
 }
 
 
@@ -416,6 +441,56 @@ recvStridedBuffer(float *dstBuf,
 // that performs sobel filtering
 // suggest using your cpu code from HW5, no OpenMP parallelism 
 //
+
+float
+sobel_filtered_pixel(float *s, int i, int j , int ncols, int nrows, float *gx, float *gy)
+{
+   float t=0.0;
+   float calculatedGx = 0.0, calculatedGy = 0.0;
+
+   int ix_start = i - 1;
+   int jy_start = j - 1;
+
+   for(int x = 0; x < 3; x++)
+   {
+      int ix = ix_start + x;
+      if(ix < 0) ix = 0;
+      if(ix >= nrows) ix = nrows - 1;
+      
+      for(int y = 0; y < 3; y++)
+      {
+         int jy = jy_start + y;
+         if(jy < 0) jy = 0;
+         if(jy >= ncols) jy = ncols - 1;
+
+         float pixel = s[ix * ncols + jy];
+         int index = x * 3 + y;
+         calculatedGx += pixel * gx[index];
+         calculatedGy += pixel * gy[index];
+      }
+   }
+
+   return sqrt(calculatedGx * calculatedGx + calculatedGy * calculatedGy);
+}
+
+void
+do_sobel_filtering(float *in, float *out, int ncols, int nrows)
+{
+   float Gx[] = {1.0, 0.0, -1.0, 
+                 2.0, 0.0, -2.0, 
+                 1.0, 0.0, -1.0};
+
+   float Gy[] = {1.0, 2.0, 1.0, 
+                 0.0, 0.0, 0.0, 
+                 -1.0, -2.0, -1.0};
+
+   for(int i = 0; i < nrows; i++)
+   {
+      float* outPtr = out + i * ncols;
+      for(int j = 0; j < ncols; j++)
+         outPtr[j] = sobel_filtered_pixel(in, i, j, ncols, nrows, Gx, Gy);
+   }
+}
 
 
 void
@@ -439,6 +514,8 @@ sobelAllTiles(int myrank, vector < vector < Tile2D > > & tileArray) {
 #endif
          // ADD YOUR CODE HERE
          // to call your sobel filtering code on each tile
+         
+         do_sobel_filtering(t->inputBuffer.data(), t->outputBuffer.data(), t->width, t->height);
          }
       }
    }
