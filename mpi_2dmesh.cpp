@@ -764,6 +764,8 @@ int main(int ac, char *av[]) {
       printf("\tScatter time:\t%6.4f (ms) \n", elapsed_scatter_time*1000.0);
       printf("\tSobel time:\t%6.4f (ms) \n", elapsed_sobel_time*1000.0);
       printf("\tGather time:\t%6.4f (ms) \n", elapsed_gather_time*1000.0);
+      printf("\tNumber of Messages Sent: %d \n", nMessagesSent);
+      printf("\tNumber of Data Moved: %d \n", nDataMoved);
    }
 
    MPI_Finalize();
