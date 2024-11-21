@@ -420,6 +420,7 @@ recvStridedBuffer(float *dstBuf,
    // values. This incoming data is to be placed into the subregion of dstBuf that has an origin
    // at dstOffsetColumn, dstOffsetRow, and that is expectedWidth, expectedHeight in size.
    //
+   int dataRecieved = 0;
 
    MPI_Datatype vectorType;
    MPI_Type_vector(expectedHeight, expectedWidth, dstWidth, MPI_FLOAT, &vectorType);
