@@ -390,18 +390,14 @@ sendStridedBuffer(float *srcBuf,
    // srcBuf by the values specificed by srcOffsetColumn, srcOffsetRow.
    //
    
-   MPI_Datatype subarrayType;
-   int baseDims[2] = {srcHeight, srcWidth};
-   int subDims[2] = {sendHeight, sendWidth};
-   int starts[2] = {srcOffsetRow, srcOffsetColumn};
-   int nDims = 2;
+   MPI_Datatype vectorType;
+   MPI_Type_vector(sendHeight, sendWidth, srcWidth, MPI_FLOAT, &vectorType);
+   MPI_Type_commit(&vectorType); 
 
-   MPI_Type_create_subarray(nDims, baseDims, subDims, starts, MPI_ORDER_C, MPI_FLOAT, &subarrayType);
-   MPI_Type_commit(&subarrayType);
+   float* offset = srcBuf + srcOffsetRow * srcWidth + srcOffsetColumn;
+   MPI_Send(offset, 1, vectorType, toRank, msgTag, MPI_COMM_WORLD);
 
-   MPI_Send(srcBuf, 1, subarrayType, toRank, msgTag, MPI_COMM_WORLD);
-
-   MPI_Type_free(&subarrayType);
+   MPI_Type_free(&vectorType);
 
    nMessagesSent++;
 }
@@ -425,20 +421,17 @@ recvStridedBuffer(float *dstBuf,
    // at dstOffsetColumn, dstOffsetRow, and that is expectedWidth, expectedHeight in size.
    //
 
-   MPI_Datatype subarrayType;
-   int sizes[2] = {dstHeight, dstWidth};
-   int subsizes[2] = {expectedHeight, expectedWidth};
-   int starts[2] = {dstOffsetRow, dstOffsetColumn};
-   int dataRecieved = 0;
+   MPI_Datatype vectorType;
+   MPI_Type_vector(expectedHeight, expectedWidth, dstWidth, MPI_FLOAT, &vectorType);
+   MPI_Type_commit(&vectorType);
 
-   MPI_Type_create_subarray(2, sizes, subsizes, starts, MPI_ORDER_C, MPI_FLOAT, &subarrayType);
-   MPI_Type_commit(&subarrayType);
+   float* offset = dstBuf + dstOffsetRow * dstWidth + dstOffsetColumn;
+   MPI_Recv(offset, 1, vectorType, fromRank, msgTag, MPI_COMM_WORLD, &stat);
 
-   MPI_Recv(dstBuf, 1, subarrayType, fromRank, msgTag, MPI_COMM_WORLD, &stat);
    MPI_Get_count(&stat, MPI_FLOAT, &dataRecieved);
    nDataMoved += dataRecieved;
 
-   MPI_Type_free(&subarrayType);
+   MPI_Type_free(&vectorType);
 }
 
 
